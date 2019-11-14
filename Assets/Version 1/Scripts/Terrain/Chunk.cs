@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Threading.Tasks;
@@ -12,6 +12,12 @@ using System.Threading;
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer), typeof(MeshCollider))]
 public class Chunk : MonoBehaviour
 {
+    [System.Serializable]
+    public class PlaceObject
+    {
+        public GameObject objectPrefab;
+        public int frequency = 5;
+    }
     public Vector3Int coord;
     public Vector3 chunkPosition;
 
@@ -19,7 +25,8 @@ public class Chunk : MonoBehaviour
     int voxelsPerChunkSqr;
     float voxelsPerChunkAlmostOne;
 
-    public GameObject treePrefab;
+    //public GameObject treePrefab;
+    public PlaceObject[] objects;
 
     [HideInInspector]
     public Mesh mesh;
@@ -60,8 +67,8 @@ public class Chunk : MonoBehaviour
 
         // Caches some useful values
         chunkSize = ChunkManager.instance.chunkSize;
-        voxelsPerChunkSqr = chunkSize * chunkSize; 
-        voxelsPerChunkAlmostOne = (chunkSize-1)/(float)chunkSize;
+        voxelsPerChunkSqr = chunkSize * chunkSize;
+        voxelsPerChunkAlmostOne = (chunkSize - 1) / (float)chunkSize;
     }
 
 
@@ -104,7 +111,7 @@ public class Chunk : MonoBehaviour
     public void Setup(Vector3Int coord, Material material)
     {
         this.coord = coord;
-        this.chunkPosition = coord * (chunkSize-1);
+        this.chunkPosition = coord * (chunkSize - 1);
         transform.position = chunkPosition;
 
         if (mesh == null)
@@ -368,27 +375,31 @@ public class Chunk : MonoBehaviour
         if (surfaceChunk)
         {
             // We enable this so that we can place trees only on parts of the chunk that are open to the sky (In theory)
-            Physics.queriesHitBackfaces = true;
-            float v = Mathf.PerlinNoise(coord.x * voxelsPerChunkAlmostOne, coord.z * voxelsPerChunkAlmostOne);
-            if (v > 0.3f)
+            for (int j = 0; j < objects.Length; j++)
             {
-                int treeCount = (int)(Random.value * 8 * v);
-                for (int i = 0; i < treeCount; i++)
+                Physics.queriesHitBackfaces = true;
+                float v = Mathf.PerlinNoise(coord.x * voxelsPerChunkAlmostOne, coord.z * voxelsPerChunkAlmostOne);
+                if (v > 0.3f)
                 {
-                    Vector3 coords = new Vector3(Random.value * chunkSize, chunkSize -1, Random.value * chunkSize);
-                    RaycastHit hit;
-                    if (Physics.Raycast(new Ray(transform.TransformPoint(coords), Vector3.down), out hit, chunkSize-1f) && hit.transform.gameObject == gameObject) {
-                        // If point is flat, and facing upwards, add a tree.
-                        if (Vector3.Dot(Vector3.down, hit.normal) < -0.75f)
+                    int treeCount = (int)(Random.value * objects[j].frequency * v);
+                    for (int i = 0; i < treeCount; i++)
+                    {
+                        Vector3 coords = new Vector3(Random.value * chunkSize, chunkSize - 1, Random.value * chunkSize);
+                        RaycastHit hit;
+                        if (Physics.Raycast(new Ray(transform.TransformPoint(coords), Vector3.down), out hit, chunkSize - 1f) && hit.transform.gameObject == gameObject)
                         {
-                            GameObject newTree = GameObject.Instantiate(treePrefab, transform);
-                            newTree.transform.position = hit.point + Vector3.down * 0.075f;
-                            entities.Add(newTree);
+                            // If point is flat, and facing upwards, add a tree.
+                            if (Vector3.Dot(Vector3.down, hit.normal) < -0.75f)
+                            {
+                                GameObject newObject = GameObject.Instantiate(objects[j].objectPrefab, transform);
+                                newObject.transform.position = hit.point + Vector3.down * 0.075f;
+                                entities.Add(newObject);
+                            }
                         }
                     }
+                    // Disable for normal operation
+                    Physics.queriesHitBackfaces = false;
                 }
-                // Disable for normal operation
-                Physics.queriesHitBackfaces = false;
             }
         }
     }
@@ -414,7 +425,7 @@ public class Chunk : MonoBehaviour
                 Vector3 origin = new Vector3(i, 0, j);
                 origin = transform.TransformPoint(origin);
                 origin.y = Preferences.maxTerrainHeight;
-                if (Physics.Raycast(new Ray(origin, Vector3.down), out hit, Preferences.maxTerrainHeight*2f) && hit.transform.gameObject == gameObject)
+                if (Physics.Raycast(new Ray(origin, Vector3.down), out hit, Preferences.maxTerrainHeight * 2f) && hit.transform.gameObject == gameObject)
                 {
                     surfaceChunk = true;
                     break;
@@ -432,7 +443,7 @@ public class Chunk : MonoBehaviour
     public bool ContainsPoint(Vector3 point)
     {
         return chunkPosition.x <= point.x && point.x < chunkPosition.x + chunkSize
-            && chunkPosition.y <= point.y && point.y < chunkPosition.y +  chunkSize
+            && chunkPosition.y <= point.y && point.y < chunkPosition.y + chunkSize
             && chunkPosition.z <= point.z && point.z < chunkPosition.z + chunkSize;
     }
 
@@ -459,7 +470,8 @@ public class Chunk : MonoBehaviour
         if (modifiedPoints.ContainsKey(point))
         {
             modifiedPoints[point] = value;
-        } else
+        }
+        else
         {
             modifiedPoints.Add(point, value);
         }
@@ -547,9 +559,9 @@ public class Chunk : MonoBehaviour
     /// <param name="b">The second <c>CubeCorner</c></param>
     /// <param name="isoValue">The value which represents a surface. (Default=0f)</param>
     /// <returns>The linearly interpolated <c>Vector3</c></returns>
-    Vector3 InterpolateVerts(CubeCorner a, CubeCorner b, float isoValue=0f)
+    Vector3 InterpolateVerts(CubeCorner a, CubeCorner b, float isoValue = 0f)
     {
-        float t = (isoValue-a.value.x) / (b.value.x - a.value.x);
+        float t = (isoValue - a.value.x) / (b.value.x - a.value.x);
         t = Mathf.Clamp01(t);
         return a.position + t * (b.position - a.position);
     }
